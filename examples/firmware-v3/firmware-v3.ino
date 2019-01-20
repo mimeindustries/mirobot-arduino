@@ -1,12 +1,15 @@
 #include <Mirobot.h>
+#include "web.h"
 
 Mirobot mirobot;
 
 void setup(){
-  mirobot.begin(2);
   mirobot.enableSerial();
+  mirobot.enableWifi();
+  mirobot.begin();
 }
 
 void loop(){
   mirobot.loop();
 }
+

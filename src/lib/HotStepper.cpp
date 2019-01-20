@@ -1,6 +1,5 @@
-// Version 72503c42 from github.com/bjpirt/HotStepper
+#ifdef AVR
 
-#define FROM_LIB
 #include "Arduino.h"
 #include "HotStepper.h"
 
@@ -11,6 +10,7 @@ HotStepper::HotStepper(volatile uint8_t* port, byte pinmask) {
   _pinmask = pinmask;
   _remaining = 0;
   _paused = false;
+  counter = PULSE_PER_3MS;
   release();
   if(firstInstance){
     firstInstance->addNext(this);
@@ -40,43 +40,11 @@ void HotStepper::instanceSetup(){
   }
 }
 
-void HotStepper::setup(){
-  HotStepper::setup(TIMER2INT);
-}
-
-void HotStepper::setup(char timer){
+void HotStepper::begin(){
   if(firstInstance){
     firstInstance->instanceSetup();
   }
-  // initialize Timer2 for a 3ms duty cycle
-  cli();      // disable global interrupts
-  if(timer == TIMER1INT){
-    TCCR1A = 0;     // set entire TCCR1A register to 0
-    TCCR1B = 0;     // same for TCCR1B
-    TCNT1  = 0; // initialize counter value to 0
-    // set compare match register to desired timer count:
-    OCR1A = 48000 / (16/clockCyclesPerMicrosecond());
-    // turn on CTC mode:
-    TCCR1B |= (1 << WGM12);
-    // Set CS10 bit for no prescaler:
-    TCCR1B |= (1 << CS10);
-    // enable timer compare interrupt:
-    TIMSK1 |= (1 << OCIE1A);
-  }else{
-    TCCR2A = 0; // set entire TCCR2A register to 0
-    TCCR2B = 0; // same for TCCR2B
-    TCNT2  = 0; // initialize counter value to 0
-    // set compare match register to desired timer count:
-    OCR2A = 187 / (16/clockCyclesPerMicrosecond());
-    // turn on CTC mode
-    TCCR2A |= (1 << WGM21);
-    // Set CS21 and CS22 bits for 256 prescaler
-    TCCR2B |= (1 << CS21);
-    TCCR2B |= (1 << CS22);
-    // enable timer compare interrupt
-    TIMSK2 |= (1 << OCIE2A);
-  }
-  sei();      // enable global interrupts
+  disableInterrupts();
 }
 
 void HotStepper::pause(){
@@ -92,13 +60,20 @@ void HotStepper::stop(){
 }
 
 void HotStepper::turn(long steps, byte direction){
+  turn(steps, direction, 1.0);
+}
+
+void HotStepper::turn(long steps, byte direction, float rate){
   if(steps < 0){
     steps = -steps;
     direction = !direction;
   }
   _remaining = steps;
   _dir = direction;
+  _counterMax = PULSE_PER_3MS / rate;
+  counter = _counterMax;
   lastDirection = direction;
+  enableInterrupts();
 }
 
 boolean HotStepper::ready(){
@@ -181,10 +156,48 @@ byte HotStepper::unpad(byte input, byte mask){
 }
 void HotStepper::release(){
   setStep(0);
+  if(firstInstance->checkReady()){
+    disableInterrupts();
+  }
+}
+
+boolean HotStepper::checkReady(){
+  if(nextInstance){
+    return ready() && nextInstance->checkReady();
+  }else{
+    return ready();
+  }
+}
+
+void HotStepper::enableInterrupts(){
+  if(TCCR1A == 0 && TCCR1B == 0){
+    // initialize Timer1 for a 3ms duty cycle
+    cli();        // disable global interrupts
+    TCNT1  = 0;   // initialize counter value to 0
+    // set compare match register to desired timer count:
+    OCR1A = ((48000 / PULSE_PER_3MS)-1) / (16/clockCyclesPerMicrosecond());
+    // turn on CTC mode:
+    TCCR1B |= (1 << WGM12);
+    // Set CS10 bit for no prescaler:
+    TCCR1B |= (1 << CS10);
+    // enable timer compare interrupt:
+    TIMSK1 |= (1 << OCIE1A);
+    sei();        // enable global interrupts
+  }
+}
+
+void HotStepper::disableInterrupts(){
+  cli();        // disable global interrupts
+  TCCR1A = 0;   // set entire TCCR1A register to 0
+  TCCR1B = 0;   // same for TCCR1B
+  sei();        // enable global interrupts
 }
 
 void HotStepper::trigger(){
-  setNextStep();
+  if(!--counter){
+    counter = _counterMax;
+    setNextStep();
+  }
   if(nextInstance){
     nextInstance->trigger();
   }
@@ -196,16 +209,9 @@ void HotStepper::triggerTop(){
   }
 }
 
-#ifdef HOTSTEPPER_TIMER1
 ISR(TIMER1_COMPA_vect)
 {
   HotStepper::triggerTop();
 }
-#endif
 
-#ifdef HOTSTEPPER_TIMER2
-ISR(TIMER2_COMPA_vect)
-{
-  HotStepper::triggerTop();
-}
-#endif
+#endif //#ifdef AVR
