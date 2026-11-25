@@ -17,7 +17,7 @@
 #include <ESP8266httpUpdate.h>
 #endif
 
-#define SERIAL_BUFFER_LENGTH 180
+#define MIROBOT_SERIAL_BUFFER_LENGTH 180
 
 // The steppers have a gear ratio of 1:63.7 and have 32 steps per turn. 32 x 63.7 = 2038.4
 #define STEPS_PER_TURN    2038.0f
@@ -43,7 +43,7 @@
 #define EEPROM_OFFSET 0
 #define MAGIC_BYTE_1 0xF0
 #define MAGIC_BYTE_2 0x0D
-#define SETTINGS_VERSION 2
+#define MIROBOT_SETTINGS_VERSION 2
 
 #define NOTE_C4  262
 
@@ -212,7 +212,7 @@ class Mirobot {
     long nextADCRead;
     bool serialEnabled = false;
     unsigned long last_char;
-    char serial_buffer[SERIAL_BUFFER_LENGTH];
+    char serial_buffer[MIROBOT_SERIAL_BUFFER_LENGTH];
     int serial_buffer_pos;
     boolean leftCollide;
     boolean rightCollide;

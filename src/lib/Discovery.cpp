@@ -1,57 +1,54 @@
 #ifdef ESP8266
 #include "Discovery.h"
+#include <ESPAsyncTCP.h>
 
-static uint32_t device_ip;
-static char device_name[33];
-static char device_type[20];
+static char httpStr[160];
+static AsyncClient *discoveryClient = nullptr;
+static uint32_t discoveryStarted = 0;
 
-static void ICACHE_FLASH_ATTR discoveryReconCb(void *arg, int8_t err) {}
-static void ICACHE_FLASH_ATTR discoveryDisconCb(void *arg) {}
-static void ICACHE_FLASH_ATTR discoverySentCb(void *arg) {}
-static void ICACHE_FLASH_ATTR discoveryRecvCb(void *arg, char *data, unsigned short len) {}
-
-static void ICACHE_FLASH_ATTR discoveryConnectedCb(void *arg) {
-  char httpStr[128];
-  static uint8_t macaddr[6];
-  struct espconn *conn=(struct espconn *)arg;
-  os_sprintf(httpStr, "POST /?address=" IPSTR "&name=%s&type=%s HTTP/1.1\r\nHost: %s\r\n\r\n", (uint8_t)(device_ip & 0xFF), (uint8_t)((device_ip >> 8) & 0xFF), (uint8_t)((device_ip >> 16) & 0xFF), (uint8_t)((device_ip >> 24) & 0xFF), device_name, device_type, DISCOVERY_HOST);
-  espconn_sent(conn, (uint8 *)httpStr, strlen(httpStr));
+static void discoveryCleanup(AsyncClient *c) {
+  if (discoveryClient == c) discoveryClient = nullptr;
+  delete c;
 }
 
-static void ICACHE_FLASH_ATTR DNSFoundCb(const char *name, ip_addr_t *ip, void *arg) {
-  static esp_tcp tcp;
-  struct espconn *conn=(struct espconn *)arg;
-  if (ip==NULL) {
-    os_printf("DNS lookup failed\n");
-    return;
+void send_discovery_request(uint32_t ip, const char *name, const char *type) {
+  if (discoveryClient) {
+    // Previous request still in flight. If it has been stuck for a long time
+    // (e.g. connect failed after DNS without any callback), forget it.
+    if (millis() - discoveryStarted < 20000) return;
+    discoveryClient = nullptr;
   }
- 
-  os_printf("Found DNS: %d.%d.%d.%d\n",
-  *((uint8 *)&ip->addr), *((uint8 *)&ip->addr + 1),
-  *((uint8 *)&ip->addr + 2), *((uint8 *)&ip->addr + 3));
- 
-  conn->type=ESPCONN_TCP;
-  conn->state=ESPCONN_NONE;
-  conn->proto.tcp=&tcp;
-  conn->proto.tcp->local_port=espconn_port();
-  conn->proto.tcp->remote_port=80;
-  os_memcpy(conn->proto.tcp->remote_ip, &ip->addr, 4);
-  espconn_regist_connectcb(conn, discoveryConnectedCb);
-  espconn_regist_disconcb(conn, discoveryDisconCb);
-  espconn_regist_reconcb(conn, discoveryReconCb);
-  espconn_regist_recvcb(conn, discoveryRecvCb);
-  espconn_regist_sentcb(conn, discoverySentCb);
-  espconn_connect(conn);
-}
 
-void send_discovery_request(uint32_t _ip, char * _name, char * _type){
-  static struct espconn conn;
-  static ip_addr_t ip;
-  device_ip = _ip;
-  strcpy(device_name, _name);
-  strcpy(device_type, _type);
-  os_printf("Fetching DNS\n");
-  espconn_gethostbyname(&conn, "local.mirobot.io", &ip, DNSFoundCb);
+  snprintf(httpStr, sizeof(httpStr),
+           "POST /?address=%u.%u.%u.%u&name=%s&type=%s HTTP/1.1\r\nHost: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+           (unsigned)(ip & 0xFF), (unsigned)((ip >> 8) & 0xFF),
+           (unsigned)((ip >> 16) & 0xFF), (unsigned)((ip >> 24) & 0xFF),
+           name, type, DISCOVERY_HOST);
+
+  AsyncClient *c = new AsyncClient();
+  if (!c) return;
+  discoveryClient = c;
+  discoveryStarted = millis();
+
+  c->onConnect([](void *, AsyncClient *client) {
+    client->write(httpStr);
+  });
+  c->onData([](void *, AsyncClient *client, void *, size_t) {
+    client->close();
+  });
+  c->onDisconnect([](void *, AsyncClient *client) {
+    discoveryCleanup(client);
+  });
+  c->onError([](void *, AsyncClient *client, int8_t err) {
+    Serial.printf("Discovery error: %s\n", client->errorToString(err));
+  });
+  c->onTimeout([](void *, AsyncClient *client, uint32_t) {
+    client->close();
+  });
+
+  if (!c->connect(DISCOVERY_HOST, DISCOVERY_PORT)) {
+    discoveryCleanup(c);
+  }
 }
 
 #endif

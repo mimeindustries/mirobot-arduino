@@ -91,7 +91,7 @@ long ShiftStepper::remaining(){
   return _remaining;
 }
 
-byte ICACHE_RAM_ATTR ShiftStepper::nextStep(){
+byte IRAM_ATTR ShiftStepper::nextStep(){
   switch(currentStep){
     case B0000:
     case B0001:
@@ -107,7 +107,7 @@ byte ICACHE_RAM_ATTR ShiftStepper::nextStep(){
   }
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::setNextStep(){
+void IRAM_ATTR ShiftStepper::setNextStep(){
   if(_remaining > 0 && !_paused){
     if(!--microCounter){
       microCounter = UCOUNTER_DEFAULT;
@@ -120,20 +120,20 @@ void ICACHE_RAM_ATTR ShiftStepper::setNextStep(){
   }
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::release(){
+void IRAM_ATTR ShiftStepper::release(){
   currentStep = 0;
   updateBits(0);
   sendBits();
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::trigger(){
+void IRAM_ATTR ShiftStepper::trigger(){
   setNextStep();
   if(nextInstance){
     nextInstance->trigger();
   }
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::updateBits(uint8_t bits){
+void IRAM_ATTR ShiftStepper::updateBits(uint8_t bits){
   currentStep = bits;
   bits &= B1111;
   bits <<= (motor_offset*4);
@@ -141,7 +141,7 @@ void ICACHE_RAM_ATTR ShiftStepper::updateBits(uint8_t bits){
   currentBits |= bits;
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::sendBits(){
+void IRAM_ATTR ShiftStepper::sendBits(){
   if(currentBits != lastBits){
     lastBits = currentBits;
     shiftOut(data_pin, clock_pin, MSBFIRST, currentBits);
@@ -152,7 +152,7 @@ void ICACHE_RAM_ATTR ShiftStepper::sendBits(){
   }
 }
 
-void ICACHE_RAM_ATTR ShiftStepper::triggerTop(){
+void IRAM_ATTR ShiftStepper::triggerTop(){
   if(firstInstance){
     firstInstance->trigger();
   }

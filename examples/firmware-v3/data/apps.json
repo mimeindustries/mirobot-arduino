@@ -29,7 +29,7 @@
       "id":"remote",
       "name":"Remote Control",
       "description": "Simple buttons let you move Mirobot easily",
-      "js":"blockly.js"
+      "js":"remote.js"
     },
     {
       "id":"snap",

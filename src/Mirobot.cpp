@@ -110,7 +110,7 @@ void Mirobot::enableWifi(){
 }
 
 void Mirobot::beginWifi(){
-  static char defaultAPName[11];
+  static char defaultAPName[13]; // "Mirobot-XXXX" and the terminator
   generateAPName(defaultAPName);
   marcel.setDefaultAPName(defaultAPName);
   marcel.setHostname("local.mirobot.io");
@@ -132,13 +132,13 @@ void Mirobot::sendDiscovery(){
 void Mirobot::initSettings(){
   uint16_t eepromOffset = sizeof(MarceauSettings) + 2;
   EEPROM.begin(sizeof(MarceauSettings) + sizeof(settings)+4);
-  if(EEPROM.read(eepromOffset) == MAGIC_BYTE_1 && EEPROM.read(eepromOffset + 1) == MAGIC_BYTE_2 && EEPROM.read(eepromOffset + 2) == SETTINGS_VERSION){
+  if(EEPROM.read(eepromOffset) == MAGIC_BYTE_1 && EEPROM.read(eepromOffset + 1) == MAGIC_BYTE_2 && EEPROM.read(eepromOffset + 2) == MIROBOT_SETTINGS_VERSION){
     // We've previously written something valid to the EEPROM
     for (unsigned int t=0; t<sizeof(settings); t++){
       *((char*)&settings + t) = EEPROM.read(eepromOffset + 2 + t);
     }
     // Sanity check the values to make sure they look correct
-    if(settings.settingsVersion == SETTINGS_VERSION &&
+    if(settings.settingsVersion == MIROBOT_SETTINGS_VERSION &&
        settings.slackCalibration < 50 &&
        abs(settings.moveCalibration) > 0.5f &&
        abs(settings.moveCalibration) < 1.5f &&
@@ -149,7 +149,7 @@ void Mirobot::initSettings(){
     }
   }
   // Either this is the first boot or the settings are bad so let's reset them
-  settings.settingsVersion = SETTINGS_VERSION;
+  settings.settingsVersion = MIROBOT_SETTINGS_VERSION;
   settings.slackCalibration = 14;
   settings.moveCalibration = 1.0f;
   settings.turnCalibration = 1.0f;
@@ -582,10 +582,12 @@ void Mirobot::checkReady(){
 }
 
 #ifdef ESP8266
+// v4 because the UI image is now LittleFS: robots still on SPIFFS firmware must keep getting the v3 files
 void Mirobot::updateFirmware(){
   if(marcel.wifi.online){
+    WiFiClient client;
     ESPhttpUpdate.rebootOnUpdate(true);
-    if(ESPhttpUpdate.update("http://downloads.mime.co.uk/Mirobot/v3/mirobot-latest.bin", "") != HTTP_UPDATE_OK){
+    if(ESPhttpUpdate.update(client, "http://downloads.mearm.com/Mirobot/WiFi/v4/firmware-latest.bin", "") != HTTP_UPDATE_OK){
       Serial.println(ESPhttpUpdate.getLastErrorString());
     }
   }
@@ -593,8 +595,9 @@ void Mirobot::updateFirmware(){
 
 void Mirobot::updateUI(){
   if(marcel.wifi.online){
+    WiFiClient client;
     ESPhttpUpdate.rebootOnUpdate(false);
-    if(ESPhttpUpdate.updateSpiffs("http://downloads.mime.co.uk/Mirobot/v3/ui-latest.bin", "") != HTTP_UPDATE_OK){
+    if(ESPhttpUpdate.updateFS(client, "http://downloads.mearm.com/Mirobot/WiFi/v4/ui-latest.bin", "") != HTTP_UPDATE_OK){
       Serial.println(ESPhttpUpdate.getLastErrorString());
     }
   }
